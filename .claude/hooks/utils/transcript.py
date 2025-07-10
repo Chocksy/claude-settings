@@ -16,20 +16,38 @@ __all__ = ["read_last_messages"]
 
 def _extract_text(entry: dict) -> str | None:
     """Return readable text from a single transcript JSON entry."""
-    # Claude transcript objects typically have {"role": "assistant"|"user"|"tool", "content": "..."}
     if not isinstance(entry, dict):
         return None
-    # Prefer content field if present
+    
+    # Claude Code transcript structure: entry.message.content (string or array)
+    message = entry.get("message", {})
+    if isinstance(message, dict):
+        content = message.get("content")
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+        elif isinstance(content, list) and content:
+            # Extract text from content array (user/assistant messages)
+            texts = []
+            for item in content:
+                if isinstance(item, dict):
+                    if "text" in item:
+                        texts.append(str(item["text"]))
+                    elif "input" in item:  # tool calls
+                        texts.append(f"Tool: {item.get('name', 'unknown')}")
+                elif isinstance(item, str):
+                    texts.append(item)
+            if texts:
+                return " ".join(texts).strip()
+    
+    # Fallback: direct content field
     content = entry.get("content")
     if isinstance(content, str) and content.strip():
         return content.strip()
+    
+    # System messages often have plain content
+    if entry.get("type") == "system" and isinstance(entry.get("content"), str):
+        return entry["content"].strip()
 
-    # Some tool messages may store under "text" key
-    txt = entry.get("text")
-    if isinstance(txt, str) and txt.strip():
-        return txt.strip()
-
-    # Fallback to raw json dump for debugging
     return None
 
 

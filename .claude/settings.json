@@ -34,7 +34,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run .claude/hooks/notification.py"
+            "command": "uv run .claude/hooks/notification.py --notify"
           }
         ]
       }

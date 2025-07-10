@@ -4,6 +4,7 @@
 # ///
 
 import json
+import os
 import sys
 from pathlib import Path
 import time
@@ -127,11 +128,17 @@ def main():
     if transcript_path:
         snippet = read_last_messages(transcript_path, max_lines=20, max_chars=200)
 
+    # DEBUG: Check environment variables in hooks
+    engineer_env = os.getenv('ENGINEER_NAME')
+    user_env = os.getenv('USER')
+    
     record = {
         "event": "PostToolUse",
         "tool": tool_name,
         "info": meaningful_info,
         "snippet": snippet,
+        "engineer_name_env": engineer_env,
+        "user_env": user_env,
         "ts": time.time()
     }
 

@@ -36,9 +36,16 @@ def log_notification(stdin_payload: str):
         data = json.loads(stdin_payload)
         message = data.get("message") or data.get("text") or str(data)[:1500]
         
-        # Get recent completions for context
-        recent_completion = get_latest_completion()
-        transcript_path = data.get("transcript_path")
+        # Get recent completions for context from aggregated events
+        recent_events = get_recent_events()
+        
+        # DEBUG: Log what we received + environment check
+        engineer_env = os.getenv('ENGINEER_NAME')
+        user_env = os.getenv('USER')
+        home_env = os.getenv('HOME')
+        debug_log = f"DEBUG notification.py: events={len(recent_events)}, message='{message}', ENGINEER_NAME='{engineer_env}', USER='{user_env}', HOME='{home_env}'"
+        with open(".claude/hooks/logs/notification_debug.log", "a") as f:
+            f.write(f"{time.time()}: {debug_log}\n")
         
         record = {"event": "Notification", "message": message, "ts": time.time()}
         # history append (keep 3)
@@ -54,16 +61,23 @@ def log_notification(stdin_payload: str):
         history = history[-3:]
         TMP_FILE.write_text(json.dumps(history))
 
-        # If the notification is not boring, speak it with enhancement
-        boring = [
-            "Claude is waiting for your input",
-            "Need input",
-        ]
-        if message and message.strip() not in boring:
-            announce_notification(recent_completion, transcript_path)
+        # Always announce with context when we have recent events
+        if recent_events:
+            announce_notification_with_context(recent_events)
     except Exception:
         pass
 
+
+def get_recent_events():
+    """Get recent events from tmp_last_event.json with transcript context."""
+    try:
+        if TMP_FILE.exists():
+            history = json.loads(TMP_FILE.read_text())
+            if isinstance(history, list):
+                return history[-3:]  # Get last 3 events
+    except Exception:
+        pass
+    return []
 
 def get_latest_completion():
     """Get the most recent tool completion info."""
@@ -80,6 +94,44 @@ def get_latest_completion():
     return None
 
 
+def announce_notification_with_context(recent_events: list):
+    """Generate and speak a smart summary from recent events and transcript."""
+    try:
+        if not recent_events:
+            return
+            
+        # Extract clean tool summaries from recent events
+        tool_summaries = []
+        
+        for event in recent_events:
+            if event.get("info"):
+                tool_summaries.append(event["info"])
+        
+        engineer_name = os.getenv('ENGINEER_NAME', '').strip() or None
+        
+        # DEBUG: Log engineer name
+        debug_log = f"DEBUG: engineer_name='{engineer_name}', env_check='{os.getenv('ENGINEER_NAME')}'"
+        with open(".claude/hooks/logs/notification_debug.log", "a") as f:
+            f.write(f"{time.time()}: {debug_log}\n")
+        
+        # Create smart summary
+        llm = LLMManager()
+        tts = TTSManager()
+        
+        # Focus on clean tool actions
+        context = f"Recent actions completed: {'; '.join(tool_summaries[-3:])}"
+        
+        message = llm.enhance_completion_message(context, engineer_name)
+        tts.speak(message)
+        
+    except Exception as e:
+        # Fallback to simple announcement
+        try:
+            tts = TTSManager()
+            tts.speak("Task completed")
+        except Exception:
+            pass
+
 def announce_notification(tool_info: str = None, transcript_path: str = None):
     """Announce completion using unified TTS and LLM managers."""
     try:
@@ -91,7 +143,18 @@ def announce_notification(tool_info: str = None, transcript_path: str = None):
         
         context_snippet = ""
         if transcript_path:
-            context_snippet = read_last_messages(transcript_path, max_lines=40, max_chars=400)
+            # DEBUG: Log transcript reading attempt
+            debug_log = f"DEBUG: Attempting to read transcript at: {transcript_path}"
+            with open(".claude/hooks/logs/notification_debug.log", "a") as f:
+                f.write(f"{time.time()}: {debug_log}\n")
+            
+            context_snippet = read_last_messages(transcript_path, max_lines=100, max_chars=2000)
+            
+            # DEBUG: Log what we read
+            debug_log = f"DEBUG: Read {len(context_snippet) if context_snippet else 0} chars from transcript"
+            with open(".claude/hooks/logs/notification_debug.log", "a") as f:
+                f.write(f"{time.time()}: {debug_log}\n")
+                f.write(f"{time.time()}: TRANSCRIPT_CONTENT: {context_snippet[:200]}...\n")
 
         # Enhance the message
         base_info = tool_info or context_snippet or "task complete"

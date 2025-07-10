@@ -50,7 +50,7 @@ class LLMManager:
             
             name_instruction = ""
             if engineer_name:
-                name_instruction = f"Sometimes (about 30% of the time) include the engineer's name '{engineer_name}' naturally."
+                name_instruction = f"ALWAYS include the engineer's name '{engineer_name}' naturally in the message."
             
             prompt = f"""Create a short, friendly completion message for: {tool_info}
 
@@ -105,8 +105,8 @@ Create ONE completion message:"""
         
         base_message = random.choice(templates)
         
-        # Add personalization occasionally
-        if engineer_name and random.random() < 0.3:
+        # Add personalization when name is available
+        if engineer_name:
             return f"{engineer_name}, {base_message.lower()}"
         
         return base_message

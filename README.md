@@ -5,10 +5,11 @@ This repository provides a ready-to-use set of **Claude Code hooks** that extend
 
 Hooks are small shell commands (here implemented as Python scripts executed via the ultra-fast **uv** runner) that Claude Code triggers automatically at key moments:
 
-* **PreToolUse** – before Claude runs a tool (not used in this repo)
+* **PreToolUse** – before Claude runs a tool
 * **PostToolUse** – right after a tool completes (we log the result)
 * **Notification** – whenever Claude sends a notification (we speak + banner it)
 * **Stop** – when Claude finishes responding (we deliver a succinct voice summary)
+* **SubagentStop** – when a Claude sub-agent finishes (we voice a short summary)
 
 ---
 
@@ -85,12 +86,11 @@ cp -R path/to/claude-settings/.claude/* ~/.claude/
 ---
 
 ## Testing Your Hooks
-1. **PostToolUse** – Edit any file inside Claude Code:
-   *Expected*: A banner + voice message like “File updated!”
-2. **Notification** – Run a long Bash command (`sleep 5`):
-   *Expected*: Voice message when Claude needs input.
-3. **Stop** – Finish a conversation / let Claude respond completely:
-   *Expected*: Short spoken summary (“Task complete”).
+1. **PreToolUse** – Attempt a tool action (e.g., run a Bash command). *Expected*: hook may block/validate and you'll still receive completion notification.
+2. **PostToolUse** – Edit any file inside Claude Code: *Expected*: banner + voice message like “File updated!”
+3. **Notification** – Run a long Bash command (`sleep 5`): *Expected*: Voice message when Claude needs input.
+4. **Stop** – Finish a conversation / let Claude respond completely: *Expected*: Short spoken summary (“Task complete”).
+5. **SubagentStop** – Trigger a multi-step task (e.g., `Task` tool). *Expected*: Sub-agent completion summary spoken.
 
 Check `.claude/tmp_last_event.json` for the last few events if something seems off.
 

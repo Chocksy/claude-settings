@@ -11,6 +11,8 @@ Hooks are small shell commands (here implemented as Python scripts executed via 
 * **Stop** – when Claude finishes responding (we deliver a succinct voice summary)
 * **SubagentStop** – when a Claude sub-agent finishes (we voice a short summary)
 
+> New ✨: Notifications and completions now read the live **transcript file** to craft richer summaries, so voice alerts tell you *what actually happened*, not just that something happened.
+
 ---
 
 ## Prerequisites

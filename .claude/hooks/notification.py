@@ -23,6 +23,7 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).parent))
 from utils.tts import TTSManager
 from utils.llm import LLMManager
+from utils.transcript import read_last_messages
 
 TMP_FILE = (Path.cwd() / ".claude").expanduser()
 TMP_FILE.mkdir(parents=True, exist_ok=True)
@@ -33,10 +34,11 @@ def log_notification(stdin_payload: str):
     """Save latest notification payload and speak it using unified managers."""
     try:
         data = json.loads(stdin_payload)
-        message = data.get("message") or data.get("text") or str(data)[:500]
+        message = data.get("message") or data.get("text") or str(data)[:1500]
         
         # Get recent completions for context
         recent_completion = get_latest_completion()
+        transcript_path = data.get("transcript_path")
         
         record = {"event": "Notification", "message": message, "ts": time.time()}
         # history append (keep 3)
@@ -58,7 +60,7 @@ def log_notification(stdin_payload: str):
             "Need input",
         ]
         if message and message.strip() not in boring:
-            announce_notification(recent_completion)
+            announce_notification(recent_completion, transcript_path)
     except Exception:
         pass
 
@@ -78,7 +80,7 @@ def get_latest_completion():
     return None
 
 
-def announce_notification(tool_info: str = None):
+def announce_notification(tool_info: str = None, transcript_path: str = None):
     """Announce completion using unified TTS and LLM managers."""
     try:
         engineer_name = os.getenv('ENGINEER_NAME', '').strip() or None
@@ -87,11 +89,13 @@ def announce_notification(tool_info: str = None):
         llm = LLMManager()
         tts = TTSManager()
         
+        context_snippet = ""
+        if transcript_path:
+            context_snippet = read_last_messages(transcript_path, max_lines=40, max_chars=400)
+
         # Enhance the message
-        if tool_info:
-            message = llm.enhance_completion_message(tool_info, engineer_name)
-        else:
-            message = llm.enhance_completion_message("task complete", engineer_name)
+        base_info = tool_info or context_snippet or "task complete"
+        message = llm.enhance_completion_message(base_info, engineer_name)
         
         # Speak the enhanced message
         tts.speak(message)

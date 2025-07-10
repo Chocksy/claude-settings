@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 import time
+from utils.transcript import read_last_messages
 
 # Cache file now lives under the active project folder
 PROJECT_CLAUDE_DIR = Path.cwd() / ".claude"
@@ -117,14 +118,20 @@ def main():
     tool_name = payload.get("tool_name") or payload.get("tool", "unknown_tool")
     tool_input = payload.get("tool_input", {})
     tool_resp = payload.get("tool_response", {}) or {}
+    transcript_path = payload.get("transcript_path")
 
     # Extract meaningful completion info
     meaningful_info = _extract_meaningful_info(tool_name, tool_input, tool_resp)
+
+    snippet = ""
+    if transcript_path:
+        snippet = read_last_messages(transcript_path, max_lines=20, max_chars=200)
 
     record = {
         "event": "PostToolUse",
         "tool": tool_name,
         "info": meaningful_info,
+        "snippet": snippet,
         "ts": time.time()
     }
 

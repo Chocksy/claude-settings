@@ -8,58 +8,36 @@
 
 import argparse
 import os
-import subprocess
-import random
-from pathlib import Path
-import json
 import sys
+import json
 import time
+from pathlib import Path
 
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    pass  # dotenv is optional
+    pass
+
+# Import our unified managers
+sys.path.insert(0, str(Path(__file__).parent))
+from utils.tts import TTSManager
+from utils.llm import LLMManager
 
 TMP_FILE = (Path.cwd() / ".claude").expanduser()
 TMP_FILE.mkdir(parents=True, exist_ok=True)
 TMP_FILE = TMP_FILE / "tmp_last_event.json"
 
 
-def get_tts_script_path():
-    """
-    Determine which TTS script to use based on available API keys.
-    Priority order: ElevenLabs > OpenAI > pyttsx3
-    """
-    # Get current script directory and construct utils/tts path
-    script_dir = Path(__file__).parent
-    tts_dir = script_dir / "utils" / "tts"
-    
-    # Check for ElevenLabs API key (highest priority)
-    if os.getenv('ELEVENLABS_API_KEY'):
-        elevenlabs_script = tts_dir / "elevenlabs_tts.py"
-        if elevenlabs_script.exists():
-            return str(elevenlabs_script)
-    
-    # Check for OpenAI API key (second priority)
-    if os.getenv('OPENAI_API_KEY'):
-        openai_script = tts_dir / "openai_tts.py"
-        if openai_script.exists():
-            return str(openai_script)
-    
-    # Fall back to pyttsx3 (no API key required)
-    pyttsx3_script = tts_dir / "pyttsx3_tts.py"
-    if pyttsx3_script.exists():
-        return str(pyttsx3_script)
-    
-    return None
-
-
 def log_notification(stdin_payload: str):
-    """Save latest notification payload and maybe speak it."""
+    """Save latest notification payload and speak it using unified managers."""
     try:
         data = json.loads(stdin_payload)
         message = data.get("message") or data.get("text") or str(data)[:500]
+        
+        # Get recent completions for context
+        recent_completion = get_latest_completion()
+        
         record = {"event": "Notification", "message": message, "ts": time.time()}
         # history append (keep 3)
         history = []
@@ -74,35 +52,50 @@ def log_notification(stdin_payload: str):
         history = history[-3:]
         TMP_FILE.write_text(json.dumps(history))
 
-        # If the notification is not the boring default, speak it immediately
+        # If the notification is not boring, speak it with enhancement
         boring = [
             "Claude is waiting for your input",
             "Need input",
         ]
         if message and message.strip() not in boring:
-            announce_notification(custom_message=message)
+            announce_notification(recent_completion)
     except Exception:
         pass
 
 
-def announce_notification(custom_message: str | None = None):
-    """Announce with TTS; if custom_message provided use it."""
+def get_latest_completion():
+    """Get the most recent tool completion info."""
     try:
-        tts_script = get_tts_script_path()
-        if not tts_script:
-            return
+        if TMP_FILE.exists():
+            history = json.loads(TMP_FILE.read_text())
+            if isinstance(history, list):
+                # Find the most recent PostToolUse event
+                for event in reversed(history):
+                    if event.get("event") == "PostToolUse":
+                        return event.get("info") or f"used {event.get('tool', 'tool')}"
+    except Exception:
+        pass
+    return None
 
-        if custom_message:
-            notification_message = custom_message[:120]
+
+def announce_notification(tool_info: str = None):
+    """Announce completion using unified TTS and LLM managers."""
+    try:
+        engineer_name = os.getenv('ENGINEER_NAME', '').strip() or None
+        
+        # Create managers
+        llm = LLMManager()
+        tts = TTSManager()
+        
+        # Enhance the message
+        if tool_info:
+            message = llm.enhance_completion_message(tool_info, engineer_name)
         else:
-            notification_message = "Task complete."
-            engineer_name = os.getenv('ENGINEER_NAME', '').strip()
-            if engineer_name and random.random() < 0.3:
-                notification_message = f"{engineer_name}, task complete."
-
-        subprocess.run([
-            "uv", "run", tts_script, notification_message
-        ], capture_output=True, timeout=10)
+            message = llm.enhance_completion_message("task complete", engineer_name)
+        
+        # Speak the enhanced message
+        tts.speak(message)
+        
     except Exception:
         pass
 

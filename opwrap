@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# 1Password CLI wrapper with sops-encrypted session cache
+set -euo pipefail
+
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/Library/Caches}/wrapper-1password"
+CACHE_FILE="$CACHE_DIR/session-token.yaml"
+OP_LOCATION="$(command -v op)"
+ACCOUNT_SHORTHAND="epicfam"  # change if you add another account
+
+mkdir -p "$CACHE_DIR"
+
+run_op() {
+  EXEC_COMMAND=(
+    "$OP_LOCATION"
+    "--session"
+    "\$data"
+    "$@"
+  )
+  # Decrypt session token into $data env var and exec op
+  sops exec-env "$CACHE_FILE" "${EXEC_COMMAND[*]}"
+}
+
+# ------------------- main -------------------
+
+# 1. If we have a cached file, verify the token still works
+if [[ -f "$CACHE_FILE" ]]; then
+  if ! run_op list vaults &>/dev/null; then
+    rm -f "$CACHE_FILE"
+  fi
+fi
+
+# 2. If no valid cache, sign in and store new token
+if [[ ! -f "$CACHE_FILE" ]]; then
+  "$OP_LOCATION" signin "$ACCOUNT_SHORTHAND" --raw | \
+    sops --encrypt /dev/stdin > "$CACHE_FILE"
+fi
+
+# 3. Forward original op command
+run_op "$@" 

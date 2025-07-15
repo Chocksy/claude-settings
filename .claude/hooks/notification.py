@@ -64,8 +64,8 @@ def announce_notification():
         # Get engineer name if available
         engineer_name = os.getenv('ENGINEER_NAME', '').strip()
         
-        # Create notification message with 30% chance to include name
-        if engineer_name and random.random() < 0.3:
+        # Always include name when available
+        if engineer_name:
             notification_message = f"{engineer_name}, your agent needs your input"
         else:
             notification_message = "Your agent needs your input"

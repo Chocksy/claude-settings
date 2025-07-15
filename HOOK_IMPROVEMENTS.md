@@ -32,7 +32,7 @@ Your `.claude/hooks` setup has been significantly improved based on the referenc
 - Now uses session-based logging
 - Filters out generic "waiting for input" messages
 - Cleaner TTS triggering logic
-- 30% chance to include engineer name for personalization
+- **ALWAYS includes engineer name when ENGINEER_NAME is set**
 
 ### **Stop Hook (`stop.py`)**
 - Uses LLM services (OpenAI/Anthropic) to generate natural completion messages

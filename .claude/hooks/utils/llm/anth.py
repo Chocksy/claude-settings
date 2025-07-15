@@ -56,10 +56,11 @@ def generate_completion_message():
     engineer_name = os.getenv("ENGINEER_NAME", "").strip()
 
     if engineer_name:
-        name_instruction = f"Sometimes (about 30% of the time) include the engineer's name '{engineer_name}' in a natural way."
+        name_instruction = f"ALWAYS include the engineer's name '{engineer_name}' in a natural way."
         examples = f"""Examples of the style: 
-- Standard: "Work complete!", "All done!", "Task finished!", "Ready for your next move!"
-- Personalized: "{engineer_name}, all set!", "Ready for you, {engineer_name}!", "Complete, {engineer_name}!", "{engineer_name}, we're done!" """
+- "{engineer_name}, all set!", "Ready for you, {engineer_name}!", "Complete, {engineer_name}!", "{engineer_name}, we're done!"
+- "{engineer_name}, task finished!", "All done, {engineer_name}!", "{engineer_name}, ready for next!"
+- "Work complete, {engineer_name}!", "{engineer_name}, everything's ready!" """
     else:
         name_instruction = ""
         examples = """Examples of the style: "Work complete!", "All done!", "Task finished!", "Ready for your next move!" """

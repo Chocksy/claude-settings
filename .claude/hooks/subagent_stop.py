@@ -61,8 +61,14 @@ def announce_subagent_completion():
         if not tts_script:
             return  # No TTS scripts available
         
-        # Use fixed message for subagent completion
-        completion_message = "Subagent Complete"
+        # Get engineer name if available
+        engineer_name = os.getenv('ENGINEER_NAME', '').strip()
+        
+        # Use personalized message for subagent completion
+        if engineer_name:
+            completion_message = f"{engineer_name}, subagent complete"
+        else:
+            completion_message = "Subagent Complete"
         
         # Call the TTS script with the completion message
         subprocess.run([

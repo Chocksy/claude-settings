@@ -1,117 +1,216 @@
 #!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.8"
+# requires-python = ">=3.11"
+# dependencies = [
+#     "python-dotenv",
+# ]
 # ///
 
-import os
-import subprocess
-import sys
+import argparse
 import json
-from pathlib import Path
+import os
+import sys
 import random
-import time
+import subprocess
+from pathlib import Path
+from datetime import datetime
 
-# Location of the cached last-event file written by other hooks
-TMP_FILE = (Path.cwd() / ".claude" / "tmp_last_event.json").expanduser()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv is optional
+
+# Import utilities
+sys.path.insert(0, str(Path(__file__).parent))
+from utils.constants import ensure_session_log_dir
+
+
+def get_completion_messages():
+    """Return list of friendly completion messages."""
+    return [
+        "Work complete!",
+        "All done!",
+        "Task finished!",
+        "Job complete!",
+        "Ready for next task!",
+    ]
 
 
 def get_tts_script_path():
-    """Same helper used in notification.py – returns best available TTS script."""
+    """
+    Determine which TTS script to use based on available API keys.
+    Priority order: ElevenLabs > OpenAI > pyttsx3
+    """
+    # Get current script directory and construct utils/tts path
     script_dir = Path(__file__).parent
     tts_dir = script_dir / "utils" / "tts"
 
+    # Check for ElevenLabs API key (highest priority)
     if os.getenv("ELEVENLABS_API_KEY"):
-        p = tts_dir / "elevenlabs_tts.py"
-        if p.exists():
-            return str(p)
+        elevenlabs_script = tts_dir / "elevenlabs_tts.py"
+        if elevenlabs_script.exists():
+            return str(elevenlabs_script)
 
+    # Check for OpenAI API key (second priority)
     if os.getenv("OPENAI_API_KEY"):
-        p = tts_dir / "openai_tts.py"
-        if p.exists():
-            return str(p)
+        openai_script = tts_dir / "openai_tts.py"
+        if openai_script.exists():
+            return str(openai_script)
 
-    p = tts_dir / "pyttsx3_tts.py"
-    if p.exists():
-        return str(p)
+    # Fall back to pyttsx3 (no API key required)
+    pyttsx3_script = tts_dir / "pyttsx3_tts.py"
+    if pyttsx3_script.exists():
+        return str(pyttsx3_script)
 
     return None
 
 
-def summarise_text(text: str) -> str:
-    """Call existing utils/llm/oai.py to get <=10-word summary."""
-    oai_script = Path(__file__).parent / "utils" / "llm" / "oai.py"
-    if not oai_script.exists():
-        return None
+def get_llm_completion_message():
+    """
+    Generate completion message using available LLM services.
+    Priority order: OpenAI > Anthropic > fallback to random message
 
-    prompt = f"Summarize in 10 words or fewer: {text}"
+    Returns:
+        str: Generated or fallback completion message
+    """
+    # Get current script directory and construct utils/llm path
+    script_dir = Path(__file__).parent
+    llm_dir = script_dir / "utils" / "llm"
+
+    # Try OpenAI first (highest priority)
+    if os.getenv("OPENAI_API_KEY"):
+        oai_script = llm_dir / "oai.py"
+        if oai_script.exists():
+            try:
+                result = subprocess.run(
+                    ["uv", "run", str(oai_script), "--completion"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    return result.stdout.strip()
+            except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+                pass
+
+    # Try Anthropic second
+    if os.getenv("ANTHROPIC_API_KEY"):
+        anth_script = llm_dir / "anth.py"
+        if anth_script.exists():
+            try:
+                result = subprocess.run(
+                    ["uv", "run", str(anth_script), "--completion"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    return result.stdout.strip()
+            except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+                pass
+
+    # Fallback to random predefined message
+    messages = get_completion_messages()
+    return random.choice(messages)
+
+
+def announce_completion():
+    """Announce completion using the best available TTS service."""
     try:
-        summary = subprocess.check_output([
-            "uv",
-            "run",
-            str(oai_script),
-            prompt,
-        ], text=True, timeout=30).strip()
-        # guard — make sure not empty and reasonable length
-        if summary:
-            return summary.split("\n")[0].strip().strip('"').strip("'")
-    except Exception:
+        tts_script = get_tts_script_path()
+        if not tts_script:
+            return  # No TTS scripts available
+
+        # Get completion message (LLM-generated or fallback)
+        completion_message = get_llm_completion_message()
+
+        # Call the TTS script with the completion message
+        subprocess.run(
+            ["uv", "run", tts_script, completion_message],
+            capture_output=True,  # Suppress output
+            timeout=10,  # 10-second timeout
+        )
+
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+        # Fail silently if TTS encounters issues
         pass
-
-    # Fallback: use --completion for generic message
-    try:
-        fallback = subprocess.check_output([
-            "uv",
-            "run",
-            str(oai_script),
-            "--completion",
-        ], text=True, timeout=20).strip()
-        return fallback or "Task complete"
     except Exception:
-        return "Task complete"
-
-
-def build_summary() -> str:
-    if not TMP_FILE.exists():
-        return "Task complete"
-
-    try:
-        history = json.loads(TMP_FILE.read_text())
-        if not isinstance(history, list):
-            history = [history]
-    except Exception:
-        return "Task complete"
-
-    # pick last non-Notification if exists else last
-    chosen = None
-    for item in reversed(history):
-        if item.get("event") != "Notification":
-            chosen = item
-            break
-    if chosen is None:
-        chosen = history[-1]
-
-    if chosen.get("event") == "Notification":
-        text = chosen.get("message", "Notification finished")
-    else:
-        tool = chosen.get("tool", "task")
-        snippet = chosen.get("snippet", "")
-        text = f"{tool} completed. {snippet}"
-
-    return summarise_text(text)
+        # Fail silently for any other errors
+        pass
 
 
 def main():
-    # Build message
-    message = build_summary()
+    try:
+        # Parse command line arguments
+        parser = argparse.ArgumentParser()
+        parser.add_argument(
+            "--chat", action="store_true", help="Copy transcript to chat.json"
+        )
+        args = parser.parse_args()
 
-    tts_script = get_tts_script_path()
-    if not tts_script:
+        # Read JSON input from stdin
+        input_data = json.load(sys.stdin)
+
+        # Extract required fields
+        session_id = input_data.get("session_id", "")
+        stop_hook_active = input_data.get("stop_hook_active", False)
+
+        # Ensure session log directory exists
+        log_dir = ensure_session_log_dir(session_id)
+        log_path = log_dir / "stop.json"
+
+        # Read existing log data or initialize empty list
+        if log_path.exists():
+            with open(log_path, "r") as f:
+                try:
+                    log_data = json.load(f)
+                except (json.JSONDecodeError, ValueError):
+                    log_data = []
+        else:
+            log_data = []
+
+        # Append new data
+        log_data.append(input_data)
+
+        # Write back to file with formatting
+        with open(log_path, "w") as f:
+            json.dump(log_data, f, indent=2)
+
+        # Handle --chat switch
+        if args.chat and "transcript_path" in input_data:
+            transcript_path = input_data["transcript_path"]
+            if os.path.exists(transcript_path):
+                # Read .jsonl file and convert to JSON array
+                chat_data = []
+                try:
+                    with open(transcript_path, "r") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line:
+                                try:
+                                    chat_data.append(json.loads(line))
+                                except json.JSONDecodeError:
+                                    pass  # Skip invalid lines
+
+                    # Write to logs/chat.json
+                    chat_file = log_dir / "chat.json"
+                    with open(chat_file, "w") as f:
+                        json.dump(chat_data, f, indent=2)
+                except Exception:
+                    pass  # Fail silently
+
+        # Announce completion via TTS
+        announce_completion()
+
         sys.exit(0)
 
-    try:
-        subprocess.run(["uv", "run", tts_script, message], capture_output=True, timeout=15)
+    except json.JSONDecodeError:
+        # Handle JSON decode errors gracefully
+        sys.exit(0)
     except Exception:
-        pass
+        # Handle any other errors gracefully
+        sys.exit(0)
 
 
 if __name__ == "__main__":

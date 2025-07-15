@@ -104,9 +104,15 @@ def main():
                 print("BLOCKED: Dangerous rm command detected and prevented", file=sys.stderr)
                 sys.exit(2)  # Exit code 2 blocks tool call and shows error to Claude
         
-        # Ensure log directory exists
-        log_dir = Path.cwd() / 'logs'
-        log_dir.mkdir(parents=True, exist_ok=True)
+        # Extract session_id
+        session_id = input_data.get('session_id', 'default')
+        
+        # Import utilities
+        sys.path.insert(0, str(Path(__file__).parent))
+        from utils.constants import ensure_session_log_dir
+        
+        # Ensure session log directory exists
+        log_dir = ensure_session_log_dir(session_id)
         log_path = log_dir / 'pre_tool_use.json'
         
         # Read existing log data or initialize empty list

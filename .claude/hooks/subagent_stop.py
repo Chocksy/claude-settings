@@ -20,6 +20,10 @@ try:
 except ImportError:
     pass  # dotenv is optional
 
+# Import utilities
+sys.path.insert(0, str(Path(__file__).parent))
+from utils.constants import ensure_session_log_dir
+
 
 def get_tts_script_path():
     """
@@ -90,13 +94,12 @@ def main():
         session_id = input_data.get("session_id", "")
         stop_hook_active = input_data.get("stop_hook_active", False)
 
-        # Ensure log directory exists
-        log_dir = os.path.join(os.getcwd(), "logs")
-        os.makedirs(log_dir, exist_ok=True)
-        log_path = os.path.join(log_dir, "subagent_stop.json")
+        # Ensure session log directory exists
+        log_dir = ensure_session_log_dir(session_id)
+        log_path = log_dir / "subagent_stop.json"
 
         # Read existing log data or initialize empty list
-        if os.path.exists(log_path):
+        if log_path.exists():
             with open(log_path, 'r') as f:
                 try:
                     log_data = json.load(f)
@@ -129,7 +132,7 @@ def main():
                                     pass  # Skip invalid lines
                     
                     # Write to logs/chat.json
-                    chat_file = os.path.join(log_dir, 'chat.json')
+                    chat_file = log_dir / 'chat.json'
                     with open(chat_file, 'w') as f:
                         json.dump(chat_data, f, indent=2)
                 except Exception:

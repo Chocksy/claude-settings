@@ -8,12 +8,11 @@ import os
 import sys
 from pathlib import Path
 import time
-from utils.transcript import read_last_messages
 
-# Cache file now lives under the active project folder
-PROJECT_CLAUDE_DIR = Path.cwd() / ".claude"
-PROJECT_CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
-TMP_FILE = PROJECT_CLAUDE_DIR / "tmp_last_event.json"
+# Import utilities
+sys.path.insert(0, str(Path(__file__).parent))
+from utils.constants import ensure_session_log_dir
+from utils.transcript import read_last_messages
 
 
 def _extract_meaningful_info(tool_name, tool_input, tool_response):
@@ -115,6 +114,9 @@ def main():
         # invalid or empty stdin
         sys.exit(0)
 
+    # Extract session_id
+    session_id = payload.get('session_id', 'default')
+    
     # Build a detailed record with meaningful information
     tool_name = payload.get("tool_name") or payload.get("tool", "unknown_tool")
     tool_input = payload.get("tool_input", {})
@@ -142,23 +144,26 @@ def main():
         "ts": time.time()
     }
 
-    # load existing history list
-    history = []
-    if TMP_FILE.exists():
-        try:
-            history = json.loads(TMP_FILE.read_text())
-            if not isinstance(history, list):
-                history = []
-        except Exception:
-            history = []
-
-    history.append(record)
-    history = history[-3:]
-
-    try:
-        TMP_FILE.write_text(json.dumps(history))
-    except Exception:
-        pass
+    # Ensure session log directory exists
+    log_dir = ensure_session_log_dir(session_id)
+    log_file = log_dir / 'post_tool_use.json'
+    
+    # Read existing log data or initialize empty list
+    if log_file.exists():
+        with open(log_file, 'r') as f:
+            try:
+                log_data = json.load(f)
+            except (json.JSONDecodeError, ValueError):
+                log_data = []
+    else:
+        log_data = []
+    
+    # Append new data
+    log_data.append(record)
+    
+    # Write back to file with formatting
+    with open(log_file, 'w') as f:
+        json.dump(log_data, f, indent=2)
 
     # exit quietly
     sys.exit(0)

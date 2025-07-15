@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo $SHELL)",
+      "Bash(security find-generic-password:*)",
+      "Bash(echo:*)",
+      "WebFetch(domain:github.com)"
+    ],
+    "deny": []
+  }
+}

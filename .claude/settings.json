@@ -78,6 +78,17 @@
           }
         ]
       }
+    ],
+    "UserPromptsSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ~/.claude/hooks/user_prompts_submit.py"
+          }
+        ]
+      }
     ]
   }
 }

@@ -79,7 +79,7 @@
         ]
       }
     ],
-    "UserPromptsSubmit": [
+    "UserPromptSubmit": [
       {
         "matcher": "",
         "hooks": [

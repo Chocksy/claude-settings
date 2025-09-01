@@ -8,24 +8,19 @@
   },
   "permissions": {
     "allow": [
-      "Bash(*)",
-      "Read(*)",
-      "Write(*)",
-      "Edit(*)",
-      "MultiEdit(*)",
-      "Glob(*)",
-      "Grep(*)",
-      "LS(*)",
-      "WebFetch(*)",
-      "WebSearch(*)",
-      "task-master(*)",
+      "Bash",
+      "Read",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "Glob",
+      "Grep",
+      "LS",
+      "WebFetch",
+      "WebSearch",
       "Bash(task-master:*)"
     ],
     "deny": []
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "bun x ccusage statusline"
   },
   "hooks": {
     "PostToolUse": [
@@ -94,5 +89,10 @@
         ]
       }
     ]
-  }
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bun x ccusage statusline"
+  },
+  "model": "opusplan"
 }
